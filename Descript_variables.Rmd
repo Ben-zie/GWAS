@@ -1,0 +1,207 @@
+---
+title: "Description population"
+author: "Benjamin DAUTRIF"
+date: "2023-04-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Library to describe data :
+# library(xlsx)
+library(prettyR)
+```
+
+```{r FUNCTIONS}
+# Statistic generator (direct to XLS) :
+
+# Using (summary) function : 
+Stat_gwas_summary <- function(x,y){
+  x_matrix <- NULL
+  x_rownames <- names(x)
+  x <- summary(x)
+  x <- t(as.matrix(x))
+  x_colnames <- c("Min","1st","Median","Mean","3rd","Max","NAs")
+  x_dim <- dim(x)
+  for(i in seq(1,x_dim[1]*x_dim[2])){x_matrix[i]=strsplit(x,":")[[i]][2]}
+  x_matrix <- matrix(nrow = x_dim[1],byrow = FALSE, x_matrix)
+  rownames(x_matrix)<-x_rownames
+  colnames(x_matrix)<-paste(x_colnames,"_",y,sep="")
+  return(x_matrix)
+}
+# Using (describe) function :
+Stat_gwas_describe <- function(x,y){
+  x <- describe(x)
+  x <- as.data.frame(x$Numeric)
+  x <- t(as.matrix(x))
+  colnames(x)<-paste(colnames(x),"_",y,sep="")
+  return(x)
+}
+
+# create Readme_file (for saved RDS) : 
+Readme_file <- function(x,y){
+  Var_name_x = deparse(substitute(x))
+  y = y
+  z = paste(y,"/Readme_",Var_name_x,".txt",sep = "")
+  
+  Path_x <- eval(parse(
+    text = paste(cat(
+      "file.exists(\"",y,"Readme_",
+      Var_name_x,
+      ".txt\")",sep = ""))))
+  if(!file.exists(z)){
+    file.create(z)
+  }
+  sink(z)
+  cat("Date : ", paste(Sys.Date()),"\n")
+  cat("\n\n File : ", Var_name_x,"\n")
+        print(z)
+  cat("\n\n Dimension for file : ", Var_name_x,"\n")
+        print(dim(x))
+  cat("\n\n Avalable variables for file : ", Var_name_x,"\n")
+        print(names(x))
+  cat("\n\n Basic statistics for file : ", Var_name_x,"\n")
+        print(summary(x))
+  sink()
+}
+```
+
+
+TEST DE COMPARAISON DE VARIANCE : 
+
+$$S=\frac{\hat{\sigma}_{A}}{\hat{\sigma}_{B}}\sim F^{n_A-1}_{n_B-1}$$
+```{r TESTS}
+# Performing statistic tests regarding type and parameters of each variable :
+# Creation of variables-descriptions pool :
+Desc_all        <- describe(Env_TSLP)
+Desc_no_asthma  <- describe(Env_TSLP[Env_TSLP$wa71118==0,])
+Desc_asthma     <- describe(Env_TSLP[Env_TSLP$wa71118==1,])
+
+# A matrix to get results for QUALitatives variables :
+Desc_qual = matrix(ncol = 3, nrow = length(Desc_all$Factor))
+colnames(Desc_qual) <-
+  c("Variable", "P","Test")
+
+Liste_models_KHI_2 <- lapply(names(Desc_all$Factor),function(x){
+  y = eval(parse(text = paste(
+  "chisq.test(rbind(Desc_no_asthma$Factor[[\"",x,"\"]][1, ],
+                     Desc_asthma$Factor[[\"",x,"\"]][1, ]),
+                     correct = TRUE,)",sep = "")))
+  eval(parse(
+       text = paste("sink(\"C:/Users/Benjamin/Documents/Etudes/Cours/M2/Stage/GWAS/DATA/",x,".txt\")")))
+   print(y)
+   sink()
+   return(y)
+  }
+  )
+
+# For each "FACTOR" type variable, perfome a KHI_2 test (continuity correction activated) :
+for (i in seq(1, length(Desc_all$Factor))) {
+  Desc_qual[i, 1] <- names(Desc_all$Factor[i])
+  Desc_qual[i, 2] <-
+    chisq.test(rbind(Desc_no_asthma$Factor[[i]][1, ], Desc_asthma$Factor[[i]][1, ]),correct = TRUE,)$p.value
+  Desc_qual[i, 3] <- "KHI_2"
+}
+
+# Selecting group of NUMERIC variables to verify if made of an unique item (a variable with all her values similar is considered as an error) :
+Quant_name<-names(Desc_all$Numeric)
+Gwas_TSLP_env_quant<-Env_TSLP[,Quant_name]
+# Delet variables with unique value :
+Quant_select <- apply(Gwas_TSLP_env_quant,2,unique)
+
+for(i in seq(1,length(Quant_select))){Quant_select[i]<-length(Quant_select[[i]])}
+Quant_name <- names(Env_TSLP[,which(Quant_select>1)])
+Desc_quant = matrix(ncol = 3, nrow = length(Quant_name))
+colnames(Desc_quant) <-
+  c("Variables", "P","Test")
+
+# Creation of variance-ratio-dataframe :
+var_ratio <-
+  t(as.matrix(data.frame(Desc_asthma$Numeric)[3, ])) / t(as.matrix(data.frame(Desc_no_asthma$Numeric)[3, ]))
+colnames(var_ratio)<-"var_ratio"
+# Concatenate population-per-variable column with var-ratio and mean_all :
+temp_all <- t(as.matrix(data.frame(Desc_all$Numeric)[5,]))
+colnames(temp_all)<-paste(colnames(temp_all),"_all",sep="")
+
+temp_no_asthma <- t(as.matrix(data.frame(Desc_no_asthma$Numeric)[5,]))
+colnames(temp_no_asthma)<-paste(colnames(temp_no_asthma),"_no_asthma",sep="")
+
+temp_asthma <- t(as.matrix(data.frame(Desc_asthma$Numeric)[5,]))
+colnames(temp_asthma)<-paste(colnames(temp_asthma),"_asthma",sep="")
+
+var_ratio <- cbind(var_ratio,
+                   temp_all,
+                   temp_no_asthma,
+                   temp_asthma)
+
+var_ratio <- data.frame(var_ratio)
+
+var_ratio$p_vartest<-apply(var_ratio, 1, function(x){pf(x["var_ratio"],x["valid.n_no_asthma"],x["valid.n_asthma"])})
+
+# For every NUMERIC variable : 
+# - perform a SHAPIRO test to check normality
+#   - if NORMALE : perform a STUDENT test
+#   - if NOT NORMALE : perform a WILCOXON test 
+for(i in seq(1,length(Quant_name))){
+  Desc_quant[i,1]<-Quant_name[i]
+  if(sum(!is.na(Env_TSLP[Env_TSLP$wa71118==0,Quant_name[i]]))!=0 &
+     sum(!is.na(Env_TSLP[Env_TSLP$wa71118==1,Quant_name[i]]))!=0){
+    p_shap <-
+      eval(parse(
+        text =   paste("shapiro.test(Gwas_TSLP_env$", Quant_name[i], ")", sep =
+                         "")))$p.value
+  if(p_shap>0.05 & var_ratio[Quant_name[i],"p_vartest"]>0.05){
+    Desc_quant[i,2]<- t.test(
+      na.omit(Env_TSLP[Env_TSLP$wa71118==0,Quant_name[i]]),
+      na.omit(Env_TSLP[Env_TSLP$wa71118==1,Quant_name[i]]),)$p.value
+      Desc_quant[i, 3] <- "Stud"
+  }else{Desc_quant[i,2]<- wilcox.test(
+      na.omit(Env_TSLP[Env_TSLP$wa71118==0,Quant_name[i]]),
+      na.omit(Env_TSLP[Env_TSLP$wa71118==1,Quant_name[i]]))$p.value
+      Desc_quant[i, 3] <- "Wilcox"}
+}}
+
+```
+
+```{r MERGE STATISTIC TABLES}
+# Proportions of subjects per qualitative-variable-modalities : 
+Desc_prop_asthma <- t(as.matrix(data.frame(Desc_all$Factor)[2,]))
+
+# Merging statistics in one table :
+# Preparing incomming files : 
+Describ_env_asthma<-data.frame(Describ_env_asthma)
+Describ_env_asthma$Variables <- rownames(Describ_env_asthma)
+Tests_env_asthma <- data.frame(rbind(Desc_quant,Desc_qual))
+
+# Merging :
+# CAUTION : merge is yet ment to be not conservativ (NO NOT-MATCHING VARIABLE CONSERVED). Change parameters if needed
+var_ratio$Variables <- rownames(var_ratio)
+Stats_env_asthma<-merge(var_ratio,Tests_env_asthma,by = "Variables", all.y = TRUE)
+Stats_env_asthma <- merge(Describ_env_asthma,Stats_env_asthma,by = "Variables")
+
+```
+
+# RECHERCHE D'ASSOCIATIONS PAR MODELES LINEAIRES (MIXTES) :
+
+Paragraphe synthétique sur les associations trouvées par tests...
+
+```{r SAVING FILES, eval = FALSE}
+Temp_path <- "C:/Users/Benjamin/Documents/Etudes/Cours/M2/Stage/GWAS"
+
+# Writing global statistics file (mostly adapted for quantitative variables) : 
+# write.xlsx(x = Stats_env_asthma,file = "/ext/egea/MULTIVARIATE/3.Cytokines/8.TSLP/8.Environnement/Stats_Env_asthma.xls")
+
+# Write global statistics to table : 
+write.csv(x = Stats_env_asthma, file = paste(Temp_path,"/....csv",sep = ""), sep = "\t",)
+write.table(x = Stats_env_asthma, file = paste(Temp_path,"/....txt",sep = ""), sep = "\t",)
+
+# Write merged dataset (including all variables + environnements variables)
+saveRDS(Gwas_TSLP_env,paste(Temp_path,"/....rds", sep=""))
+saveRDS(Env_TSLP,paste(Temp_path,"/....rds", sep=""))
+
+# Write Readme-file : 
+Readme_file(Gwas_TSLP_env, paste(Temp_path,"/.../LOG",sep = ""))
+Readme_file(Env_TSLP, paste(Temp_path,"/.../LOG",sep = ""))
+
+```

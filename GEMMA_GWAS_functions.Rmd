@@ -1,0 +1,144 @@
+---
+title: "GEMMA_GWAS_functions"
+author: "Benjamin DAUTRIF"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Function to produce GEMMA files and verification files for GWAS :
+Merge_GEMMA <- function(x,Nom_projet){
+  y <- subset(x, select = Liste_COVARIABLES)
+  w <- subset(x, select = PHENOTYPE)
+  y <- merge(
+           y,
+           Caneva_sujets,
+           by = "nodos",
+           all.y = TRUE
+         )
+  w <- merge(
+           w,
+           Caneva_sujets,
+           by = "nodos",
+           all.y = TRUE
+         )
+  z <-  lapply(list(y,w),function(x){x[-c(1,length(names(x)))]})
+
+  Projet_path_file <- paste(Temp_path,"/DATA/TXT/GEMMA/",Nom_projet,sep = "")
+  Projet_path_log <- paste(Temp_path,"/DATA/LOG/GEMMA/",Nom_projet,"_CU",sep = "")
+  dir.create(Projet_path_file)  
+  dir.create(Projet_path_log)
+# Ecriture des fichiers GEMMA de contrôle ultime :
+  write.table(
+    x = as.data.frame(w),
+    file = paste(Projet_path_log,"/",Nom_projet, "_PHENOTYPE_CU.txt", sep = ""), 
+    sep = "\t",
+    na = "NA",
+    quote = FALSE,
+    row.names = FALSE,
+    col.names = TRUE
+  )
+  write.table(
+    x = as.data.frame(y),
+    file = paste(Projet_path_log,"/",Nom_projet, "_COVARIABLES_CU.txt", sep = ""), 
+    sep = "\t",
+    na = "NA",
+    quote = FALSE,
+    row.names = FALSE,
+    col.names = TRUE
+  )
+  # Ecriture des fichiers GEMMA :
+  write.table(
+    x = as.data.frame(w[,-as.numeric(length(w))]),
+    file = paste(Projet_path_file,"/",Nom_projet, "_PHENOTYPE.txt", sep = ""), 
+    sep = "\t",
+    na = "NA",
+    quote = FALSE,
+    row.names = FALSE,
+    col.names = FALSE
+  )
+  write.table(
+    x = as.data.frame(y[,-as.numeric(length(y))]),
+    file = paste(Projet_path_file,"/",Nom_projet, "_COVARIABLES.txt", sep = ""), 
+    sep = "\t",
+    na = "NA",
+    quote = FALSE,
+    row.names = FALSE,
+    col.names = FALSE
+  )
+    return(z)
+}
+
+
+
+```
+
+```{r CHARGEMENT FICHIER SNP}
+# Chargement du fichier des SNP 
+x <-
+  read.delim(
+    "/....tsv",
+    sep = ","
+  )
+```
+
+```{r SELECTION DE REGIONS POUR LOCUS ZOOM}
+z ="/.../test/"
+
+y = 5e-5
+
+Locus_zoom_GWAS <- function(x,y,z){
+main_dir <- z  
+# Create a list of SNPs names, ordered by P-Value (Wald test) :
+Tri_SNP<-x[order(x$p_wald),"rsid"]
+# assign threshold :
+Seuil_Wald <- y
+
+# Manage file destination :
+sub_dir <- paste("LZ", substitute(x), "_", as.character(Seuil_Wald),sep = "")
+if (file.exists(sub_dir)==FALSE){
+      dir.create(paste(main_dir, sub_dir))
+} 
+
+# Iterations for search in SNPs list : 
+while(x[x$rsid==Tri_SNP[1],"p_wald"]<=Seuil_Wald){
+  print(paste("Traitement du SNP :", Tri_SNP[1], ", [P-Value =", x[x$rsid == Tri_SNP[1], "p_wald"], "]"))
+  
+# Memorise 1st SNP's position :
+  Position_locus <- x[x$rsid == Tri_SNP[1],"pos_hg19"]
+
+# CAUTION !!! Need take in consideration chromosome (position being chromosome related) :
+  Chromosome_locus <- x[x$rsid == Tri_SNP[1],"chr"]
+# Create interval : (25 Kpb)
+  Intervalle_locus <- c(Position_locus - 250000,Position_locus + 250000)
+  
+# Select all SNPs in interval :
+  Selection_locus <- x[x$pos_hg19>= Intervalle_locus[1] & x$pos_hg19<= Intervalle_locus[2] &    x$chr == Chromosome_locus,]
+
+# Title creation for file :
+  Titre_locus <- paste("_",x[x$rsid == Tri_SNP[1],"rsid"], sep="")
+
+# Remove selected SNPs for next round :
+  Tri_SNP <- Tri_SNP[!(Tri_SNP %in% Selection_locus$rsid)]
+
+# Write file for this round : 
+write.table(
+  x = Selection_locus,
+  file = paste(
+    main_dir, sub_dir,
+    substitute(x),
+    Titre_locus,
+    ".tsv",
+    sep = ""
+  ),
+  quote = FALSE,
+  sep = "\t",
+  row.names = FALSE
+)
+}
+}
+```

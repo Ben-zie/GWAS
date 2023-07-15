@@ -1,0 +1,36 @@
+---
+title: "Locus_ZOOM_select"
+author: "Benjamin DAUTRIF"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+Temp_path <- "/..."
+```
+
+```{r LOADING FUNCTIONS, eval=FALSE}
+# Load functions for GWAS : 
+
+source(paste(Temp_path,"6.Scripts/y.Functions/GEMMA_GWAS_functions.R", sep = ""))
+# Exposes :
+# - Merge_GEMMA() : to create model files for GEMMA
+# - Locus_zoom_GWAS() : to select and cut result SNP list by significance order
+```
+
+```{r PRODUCTION FICHIERS GEMMA, eval=FALSE}
+# Loading result dataset :
+Locus_tot <-
+  read.delim(paste(
+    Temp_path,"/....tsv",sep = ""),
+    sep = ","
+  )
+
+for(i in seq(7,6)){
+Seuil = paste("5e-",i,sep = "")
+Destination = paste(Temp_path,"/...",sep = "")
+Locus_zoom_GWAS(Locus_tot,as.numeric(Seuil),Destination)
+}
+```

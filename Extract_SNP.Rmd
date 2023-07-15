@@ -1,0 +1,137 @@
+---
+title: "Test d'association : GASTON : COHORTE / 1000 Genomes -> pheno = TSLP"
+author: "Benjamin DAUTRIF"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+Temp_path <- "/..."
+
+library(gaston)
+```
+
+```{r LOADING RELATEDNESS DATASETS}
+#===============================================================================
+# Loading ordered list of subjects (same as KINSHIP MATRIX)
+#===============================================================================
+Caneva_sujets <-
+  read.table(paste(Temp_path,
+    "/....txt",sep =""),
+    header = TRUE,
+    na.strings = "",
+    sep = "\t"
+  )
+
+#===============================================================================
+# Loading KINSHIP MATRIX
+#===============================================================================
+KINSHIP_mat <-
+  read.table(paste(Temp_path,
+    "/....txt",sep =""),
+    header = FALSE,
+    na.strings = "",
+    sep = "\t"
+  )
+```
+
+```{r LOADING PHENO AND COVAR DATASETS}
+#===============================================================================
+# Loading PHENOTYPE dataset
+#===============================================================================
+PHENO <-
+  read.table(paste(Temp_path,
+    "/....txt",sep =""),
+    header = FALSE,
+    na.strings = "NA",
+    sep = "\t"
+  )
+
+#===============================================================================
+# Loading COVARIABLES dataset
+#===============================================================================
+COVAR <-
+  read.table(paste(Temp_path,
+    "/....txt",sep =""),
+    header = TRUE,
+    na.strings = "NA",
+    sep = "\t"
+  )
+
+names(COVAR)<-
+c("...",
+    "..."
+  )
+
+```
+
+```{r READ BED MATRIX FROM GENOTYPES}
+#===============================================================================
+# Reading bed matrix from (Bed/Fam/Bim) files
+#===============================================================================
+setwd(paste(Temp_path,"TEST/",sep = ""))
+basename = "..."
+print(getwd())
+test_gaston <- read.bed.matrix(basename,bed = paste(basename, ".bed",sep = ""),
+                                        fam = paste(basename, ".fam",sep = ""),
+                                        bim = paste(basename, ".bim",sep = ""),
+                                        verbose = getOption("gaston.verbose",TRUE))
+
+```
+
+```{r FORMAT DATASETS}
+# Rename key-variables in native-datasets :
+names(PHENO) <- c("nodos","Pheno_inv")
+names(COVAR)[1] <- "nodos"
+
+# Add phenotype to BED.MATRIX (regarding subjects "nodos" !!) :
+Order_pheno <- match(PHENO$nodos,test_gaston@ped$id)
+test_gaston@ped$pheno<-PHENO[order(Order_pheno),2]
+
+# PHENO <- PHENO[!is.na(PHENO[,2]),]
+
+# MERGE HPENO and COVAR by "nodos" :
+Selection_pheno_covar <- merge(PHENO,COVAR, by = "nodos", all.x = TRUE, all.y = TRUE)
+# Erase subjects with missing values in COVAR and PHENO :
+Selected_pheno_covar  <- na.omit(Selection_pheno_covar)
+# Retrieve covariables-selection matrix (without NAs) and add INTERCEPT ("1" column):
+Selected_covar  <- cbind(1,Selected_pheno_covar[,-2])
+
+# Erase NAs-including subjects form KINSHIP-MATRIX too :
+Selected_Kinship <-
+  as.matrix(KINSHIP_mat[apply(is.na(Selection_pheno_covar), 1, function(x) {
+    sum(x) == 0
+  }), apply(is.na(Selection_pheno_covar), 1, function(x) {
+    sum(x) == 0
+  })])
+
+# and finally from BED.MATRIX :
+Selected_test_gaston <-
+  select.inds(test_gaston, id %in% Selected_pheno_covar$nodos)
+```
+
+```{r ASSOCIATION TEST, echo=FALSE}
+# Association test with GASTON using (AGE,SEX,TABACO_ex,TABAC_active, BMI) :
+ASSOC <- association.test(Selected_test_gaston, Selected_test_gaston@ped$pheno, Selected_covar[,-c(2,7)], method = "lmm", K = Selected_Kinship)
+
+```
+
+```{r RENDER AND TUNING SELECTION PADDLE}
+# Command bloc to THIN SNPs pool :
+# LD.thin(
+#   Selected_test_gaston,
+#   threshold,
+#   max.dist = 500e3,
+#   beg = 1,
+#   end = ncol(Selected_test_gaston),
+#   which.snps,
+#   dist.unit = c("bases", "indices", "cM"),
+#   extract = TRUE,
+#   keep = c("left", "right", "random")
+# )
+
+qqplot.pvalues(ASSOC)
+manhattan(ASSOC)
+```
